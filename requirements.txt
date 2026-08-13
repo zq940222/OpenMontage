@@ -14,3 +14,12 @@ openai>=2.44.0         # Videos API support for Sora 2
 fastapi>=0.110
 uvicorn>=0.29
 watchfiles>=0.21
+
+# Subscription-backed providers (runtime=browser) - OPTIONAL.
+# Install only if you want to generate on an account you already pay for
+# instead of an API key. See docs/PROVIDERS.md -> No-API-Key Providers.
+#   playwright>=1.40             # gemini_web_image: drives a logged-in Gemini session
+#                                #   then run: python -m playwright install chromium
+#   opencv-contrib-python>=4.9   # gemini_web_image: FSR watermark removal (best quality)
+#   simple-lama-inpainting>=0.1  # gemini_web_image: LaMa watermark removal (pulls torch)
+# dreamina_video needs no Python package - just the `dreamina` CLI on PATH.

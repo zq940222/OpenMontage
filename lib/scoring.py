@@ -441,6 +441,10 @@ def score_provider(tool, task_context: dict[str, Any]) -> ProviderScore:
             latency = 0.9
         elif runtime == "hybrid":
             latency = 0.6
+        elif runtime == "browser":
+            # Account-session tools (web UI automation / OAuth CLI) queue on the
+            # provider's consumer infrastructure — slower than direct API calls.
+            latency = 0.3
         else:
             latency = 0.4
 

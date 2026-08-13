@@ -10,6 +10,7 @@ Everything you need to know about every provider in OpenMontage — setup instru
 
 | Step | Cost | What to set up | What it unlocks |
 |------|------|----------------|-----------------|
+| 0 | **already paid for** | Jimeng (即梦) membership + Gemini subscription | Seedance 2.0 video and Gemini images with **no API key** — see [No-API-Key Providers](#no-api-key-providers-use-your-own-subscriptions) |
 | 1 | **$0** | Pexels + Pixabay | Stock photos and videos — enough to produce basic videos |
 | 2 | **$0** | Google API key | TTS with 700+ voices (1M chars/month free) + $300 new account credit |
 | 3 | **$0** | ElevenLabs | Premium TTS + music + SFX (10K chars/month free) |
@@ -63,7 +64,110 @@ SUNO_API_KEY=                # Suno music generation
 # LOCAL (no keys needed — just GPU + install)
 VIDEO_GEN_LOCAL_ENABLED=     # Set to "true" for local video gen
 VIDEO_GEN_LOCAL_MODEL=       # wan2.1-1.3b, wan2.1-14b, hunyuan-1.5, ltx2-local, cogvideo-5b
+
+# NO KEY AT ALL — your own subscriptions (one-time login instead of an env var)
+#   dreamina_video     dreamina login                        (Jimeng membership credits)
+#   gemini_web_image   python -m tools._browser login gemini (Gemini subscription quota)
 ```
+
+---
+
+## No-API-Key Providers (use your own subscriptions)
+
+These two spend an account you already pay for instead of an API key. Both report `runtime: browser` in the registry and `estimate_cost() == 0.0` USD — the real budget is your subscription quota or credit balance, so treat cost governance as "credits/quota", not dollars.
+
+### Jimeng (即梦) — Seedance 2.0 video on membership credits
+
+> **Best if you have a Jimeng membership but no Volcengine or fal.ai key.** Runs the official `dreamina` CLI, which authenticates with your own account via OAuth device flow.
+
+**Tool unlocked:** `dreamina_video`
+**Env vars:** none — the CLI stores its own session in `~/.dreamina_cli`
+
+#### Setup
+
+```bash
+dreamina login          # OAuth device flow — opens a verification URL + code
+dreamina user_credit    # confirm: {"total_credit": ..., "vip_level": ...}
+```
+
+Install the `dreamina` CLI first if it isn't on PATH. For a headless machine: `dreamina login --headless`, then `dreamina login checklogin --device_code=<code>`.
+
+#### What it's best for
+
+- Seedance 2.0 video with native synced audio, no API key
+- 全能参考 (multimodal) mode: up to 9 image + 3 video + 3 audio references in one shot
+- First/last-frame and 2–20 keyframe continuity between shots
+- Character consistency driven by reference images
+- Chinese-language prompts
+
+#### Modes and limits
+
+| `operation` | CLI command | Ratio from | Duration |
+|---|---|---|---|
+| `text_to_video` | `text2video` | `--ratio` | 4–15 s |
+| `image_to_video` | `image2video` | input image | 4–15 s (3.x models: 3–12 s) |
+| `frames_to_video` | `frames2video` | first frame | 4–15 s |
+| `multiframe_to_video` | `multiframe2video` | first image | 0.5–8 s per segment, ≥2 s total |
+| `multimodal_to_video` / `reference_to_video` | `multimodal2video` | `--ratio` | 4–15 s |
+
+Seedance 2.0 family is 720p-only; 1080p requires `3.5pro`/`3.0pro` on the image/frames modes. `multiframe_to_video` accepts no model or resolution override.
+
+#### Pricing
+
+Billed in **membership credits**, not USD. Observed: a 6 s `seedance2.0fast` 720p clip cost **66 credits** (~11 credits/second). Check the balance with `dreamina user_credit`; each result reports actual spend in `data.credit_count`.
+
+#### Notes
+
+`AigcComplianceConfirmationRequired` is terminal — run that model once manually in the Jimeng web UI to accept the confirmation, then retry. Re-downloading a finished task is free; regenerating is not. See `.agents/skills/dreamina-cli/SKILL.md` for the full retry discipline.
+
+---
+
+### Gemini Web — images on your Gemini subscription
+
+> **Best if you have Gemini Pro / Google One AI but no `GOOGLE_API_KEY`.** Drives gemini.google.com through a persistent Chromium profile that holds your login.
+
+**Tool unlocked:** `gemini_web_image`
+**Env vars:** none required (`OPENMONTAGE_BROWSER_*` are optional tuning)
+
+#### Setup
+
+```bash
+pip install playwright
+python -m playwright install chromium
+python -m tools._browser login gemini    # sign in yourself in the window that opens
+python -m tools._browser status          # confirm
+```
+
+OpenMontage never reads, types, or stores your credentials — you sign in by hand. Cookies live in `~/.openmontage/browser/gemini`, outside the repo. `python -m tools._browser logout gemini` forgets the session.
+
+#### What it's best for
+
+- Character and scene reference sheets kept consistent across a shoot
+- Keyframes feeding a video model (first/last frame, multi-keyframe modes)
+- Conversational edits of an image you already generated
+- Any still where you'd rather spend subscription quota than per-image API cost
+
+#### Watermark cleanup (important)
+
+Gemini stamps a small sparkle glyph in the bottom-right corner (measured: 15×12px, 31px from the right edge, 42px from the bottom on a 1024×572 output). Used as a video reference frame, it gets reproduced into the footage where it can't be fixed.
+
+Removal is on by default and `watermark_mode: "auto"` picks the best remover installed — `fsr` (frequency-selective reconstruction, needs `opencv-contrib-python`) rebuilds the surrounding texture through the patch and is invisible at 100%; `lama` (needs `simple-lama-inpainting`) is comparable; `telea` leaves a flat blob on texture; `delogo` (ffmpeg) is a visible smudge; `crop` cuts the strip off. For best results:
+
+```bash
+pip install opencv-contrib-python
+```
+
+Verify `data.watermark_cleanup.applied` and read `quality` before using the image downstream.
+
+#### File format
+
+Gemini serves JPEG regardless of the extension you request. The tool re-encodes to match your `output_path` and reports both `format` (on disk) and `source_format` (as served).
+
+#### Limits
+
+No seed, no negative prompt, no ratio control — the requested aspect ratio is written into the prompt as a request, not a constraint. One request at a time per profile (a Chromium profile can't be opened twice), so parallel scene generation serializes here. A web session can require re-login mid-batch, which makes this a poor fit for unattended runs.
+
+Failures dump a screenshot and page HTML to `~/.openmontage/browser/_debug/gemini/`. When the web UI changes, selectors are data — override them in `~/.openmontage/browser/selectors.json` without touching code. See `.agents/skills/gemini-web-image/SKILL.md`.
 
 ---
 

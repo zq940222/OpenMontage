@@ -336,6 +336,14 @@ QUICK SETUP OPTIONS (1-minute each — set an env var in .env)
 LOCAL OPTIONS (free, needs hardware):
   Tools with runtime=LOCAL or runtime=LOCAL_GPU — read from the menu.
 
+SUBSCRIPTION OPTIONS (no API key — a one-time login on an account the user already pays for):
+  Tools with runtime=BROWSER. Their setup_offer carries kind="one_time_login"
+  plus the exact `command` and `health_check` to run. Present these as
+  "free with your existing subscription" and lead with them before paid keys —
+  they are usually the cheapest upgrade available. Their estimate_cost() is
+  0.0 USD by design: the budget is subscription quota or provider credits, so
+  report spend in those units (e.g. data.credit_count), never as "$0.00, free".
+
 Already Available:
   List what's working. The user should feel good about what they have.
 ```
@@ -476,7 +484,9 @@ Key capability families to look for in the output:
 - **character_animation** — Local character specs, SVG rigs, pose libraries, action timelines, previews, and QA.
 - **enhancement** — Upscale, background removal, face enhance, color grading.
 
-Each tool in the registry declares `best_for`, `install_instructions`, `runtime` (LOCAL, API, LOCAL_GPU, HYBRID), and `status`. Read these fields — do not assume tool strengths from memory.
+Each tool in the registry declares `best_for`, `install_instructions`, `runtime` (LOCAL, API, LOCAL_GPU, HYBRID, BROWSER), and `status`. Read these fields — do not assume tool strengths from memory.
+
+**`runtime=BROWSER`** means the tool drives an account the user is already logged into — a web UI session or an OAuth CLI — instead of an API key. Setup is a one-time interactive login (`setup_offer.command`), never an env var, so it never appears in the env-var setup offers. Two consequences for planning: generation spends **subscription quota or provider credits, not USD** (so `estimate_cost()` is 0.0 and budget talk must be in the provider's own units), and a session can log out or serialize on a single browser profile — call that out at proposal time for long batches instead of discovering it mid-run.
 
 ### Tool Class Naming Convention
 
