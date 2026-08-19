@@ -38,10 +38,25 @@ SELECTORS: dict[str, dict[str, list[str]]] = {
             "input[type='file']",
         ],
         # Any of these means the session is not logged in.
+        # The localized entries are not optional garnish: on a zh-CN Gemini the
+        # sign-in control is a bare `button` reading 登录 with no href and no
+        # English aria-label, so the three ASCII selectors above all miss and
+        # is_logged_out() reports a logged-out page as signed in. That false
+        # green makes the login CLI's wait_for_signed_in() pass on its first
+        # poll (the anonymous landing page also carries a prompt composer),
+        # so it records a login that never happened and closes the window
+        # before the user can type. Match the text EXACTLY — measured against
+        # the live page: `button:has-text('登录')` also matches 退出登录 on a
+        # signed-in page (would invert the bug), and `button:text-is('登录')`
+        # matches nothing because the label sits in a nested Material span.
+        # `button >> text="登录"` is the form that hits the real control and
+        # still ignores 退出登录.
         "logged_out": [
             "a[href*='accounts.google.com/ServiceLogin']",
             "a[href*='/signin']",
             "button[aria-label*='Sign in' i]",
+            'button >> text="登录"',
+            'a >> text="登录"',
         ],
         # Generated images inside the response stream. These must be
         # STRUCTURAL: matching on host (googleusercontent.com) also matches the
