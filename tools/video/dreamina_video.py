@@ -83,6 +83,10 @@ _INSUFFICIENT_CREDIT_MARKER = "InsufficientCredit"
 # Only ever applied to submits that were NOT charged (see _submit).
 _SUBMIT_ATTEMPTS = 3
 
+# `user_credit` is free, so a transient network drop should never be
+# reported to the user as "you are logged out".
+_LOGIN_CHECK_ATTEMPTS = 3
+
 _FAILED_STATUSES = {"failed", "fail", "error", "cancelled", "canceled", "expired"}
 
 
@@ -702,23 +706,34 @@ class DreaminaVideo(BaseTool):
         """Verify the OAuth session via `dreamina user_credit` (free call).
 
         Returns (credit_balance, error). error is None when logged in.
+
+        Retries before blaming auth. A dropped connection makes `user_credit`
+        exit non-zero with no output, which is indistinguishable in one sample
+        from a logged-out session — and misreading it aborts an entire batch
+        with a "run `dreamina login`" message for a session that is perfectly
+        alive. The call is free, so retrying costs nothing but a few seconds;
+        only a session that fails every attempt is reported as an auth problem.
         """
-        try:
-            proc = self.run_command([_CLI, "user_credit"], timeout=60)
-        except Exception as exc:
-            return None, (
-                "Dreamina session check failed — you are probably not logged "
-                f"in (auth issue, not a prompt/tool bug). Fix: run `dreamina login` "
-                f"and complete the OAuth device login, then retry. Detail: {exc}"
-            )
-        payload = self._parse_json(proc.stdout)
-        if not payload or "total_credit" not in payload:
-            return None, (
-                "Could not read Jimeng credit balance — the `dreamina` session "
-                "looks logged out. Fix: run `dreamina login`, then retry. "
-                f"CLI output: {(proc.stdout or '').strip()[:300]}"
-            )
-        return int(payload.get("total_credit", 0)), None
+        last = ""
+        for attempt in range(_LOGIN_CHECK_ATTEMPTS):
+            if attempt:
+                time.sleep(3)
+            try:
+                proc = self.run_command([_CLI, "user_credit"], timeout=60)
+            except Exception as exc:  # noqa: BLE001 — transport vs auth is decided below
+                last = f"{exc}"
+                continue
+            payload = self._parse_json(proc.stdout)
+            if payload and "total_credit" in payload:
+                return int(payload.get("total_credit", 0)), None
+            last = f"CLI output: {(proc.stdout or '').strip()[:300]}"
+
+        return None, (
+            "Dreamina session check failed — you are probably not logged in "
+            f"(auth issue, not a prompt/tool bug). Fix: run `dreamina login` and "
+            f"complete the OAuth device login, then retry. Failed "
+            f"{_LOGIN_CHECK_ATTEMPTS}x; last detail: {last}"
+        )
 
     def _submit(self, cmd: list[str]) -> str:
         """Submit until the task is actually DISPATCHED, not merely accepted.
