@@ -88,6 +88,9 @@ class ToolRuntime(str, Enum):
     LOCAL_GPU = "local_gpu"    # Runs on-device but needs GPU (VRAM)
     API = "api"                # Calls an external API, requires API key, costs money
     HYBRID = "hybrid"          # Can run locally OR via API (e.g., image_selector)
+    BROWSER = "browser"        # Drives a logged-in user account session (web UI or
+                               # OAuth CLI); consumes subscription quota, needs a
+                               # one-time interactive login, no API key or per-call USD cost
 
 
 class ExecutionMode(str, Enum):

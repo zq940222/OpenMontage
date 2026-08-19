@@ -336,6 +336,14 @@ QUICK SETUP OPTIONS (1-minute each — set an env var in .env)
 LOCAL OPTIONS (free, needs hardware):
   Tools with runtime=LOCAL or runtime=LOCAL_GPU — read from the menu.
 
+SUBSCRIPTION OPTIONS (no API key — a one-time login on an account the user already pays for):
+  Tools with runtime=BROWSER. Their setup_offer carries kind="one_time_login"
+  plus the exact `command` and `health_check` to run. Present these as
+  "free with your existing subscription" and lead with them before paid keys —
+  they are usually the cheapest upgrade available. Their estimate_cost() is
+  0.0 USD by design: the budget is subscription quota or provider credits, so
+  report spend in those units (e.g. data.credit_count), never as "$0.00, free".
+
 Already Available:
   List what's working. The user should feel good about what they have.
 ```
@@ -480,7 +488,9 @@ Key capability families to look for in the output:
 - **3d_world_rendering** — Production assembly, terrain, lighting, materials, camera, and image-sequence rendering in Blender. Route through `blender_world`; use Three.js for interactive/blockout review, not as a substitute for Blender when reference-grade scene density is requested.
 - **enhancement** — Upscale, background removal, face enhance, color grading.
 
-Each tool in the registry declares `best_for`, `install_instructions`, `runtime` (LOCAL, API, LOCAL_GPU, HYBRID), and `status`. Read these fields — do not assume tool strengths from memory.
+Each tool in the registry declares `best_for`, `install_instructions`, `runtime` (LOCAL, API, LOCAL_GPU, HYBRID, BROWSER), and `status`. Read these fields — do not assume tool strengths from memory.
+
+**`runtime=BROWSER`** means the tool drives an account the user is already logged into — a web UI session or an OAuth CLI — instead of an API key. Setup is a one-time interactive login (`setup_offer.command`), never an env var, so it never appears in the env-var setup offers. Two consequences for planning: generation spends **subscription quota or provider credits, not USD** (so `estimate_cost()` is 0.0 and budget talk must be in the provider's own units), and a session can log out or serialize on a single browser profile — call that out at proposal time for long batches instead of discovering it mid-run.
 
 ### Tool Class Naming Convention
 
@@ -680,9 +690,9 @@ The `.agents/skills/` directory is large. When you're not coming in through a to
 | **Composition runtime** | `remotion`, `remotion-best-practices`, `synthetic-screen-recording` (fake terminal/UI demos via Remotion TerminalScene), `threejs-world-generation` (semantic terrain and free-viewpoint HyperFrames worlds) |
 | **Animation knowledge (generic)** | `gsap-core`, `gsap-timeline`, `gsap-plugins` (SplitText / MorphSVG / DrawSVG / MotionPath / Flip / CustomEase), `gsap-utils`, `gsap-react`, `gsap-performance`, `gsap-scrolltrigger`, `gsap-frameworks`, `framer-motion` (Disney 12 principles), `lottie-bodymovin` (Lottie export) |
 | **Character animation** | `character-rigging`, `svg-character-animation`, `pose-library-design`, `canvas-procedural-animation`, `character-animation-qa` |
-| **Image generation** | `bfl-api`, `flux-best-practices` |
-| **Video generation** | `seedance-2-0` (preferred premium default — cinematic, trailer, multi-shot, synced audio, lip-sync), `gemini-omni` (conversational video editing, reference tags, timecoded beats), `ai-video-gen`, `ltx2` |
-| **Audio** | `elevenlabs`, `music`, `sound-effects`, `acestep`, `text-to-speech`, `azure-text-to-speech` (optional cloud TTS — tool `azure_tts`, same Speech key as `azure_stt`), `setup-api-key` |
+| **Image generation** | `bfl-api`, `flux-best-practices`, `gemini-web-image` (subscription, no API key — watermark cleanup is mandatory before use as a video reference frame) |
+| **Video generation** | `seedance-2-0` (preferred premium default — cinematic, trailer, multi-shot, synced audio, lip-sync), `dreamina-cli` (same Seedance 2.0 on a Jimeng membership, no API key — read with `seedance-2-0` for prompting), `gemini-omni` (conversational video editing, reference tags, timecoded beats), `ai-video-gen`, `ltx2` |
+| **Audio** | `elevenlabs`, `music`, `suno-web-music` (subscription, no API key — instrumental beds, two candidates per spend), `sound-effects`, `acestep`, `text-to-speech`, `azure-text-to-speech` (optional cloud TTS — tool `azure_tts`, same Speech key as `azure_stt`), `setup-api-key` |
 | **Speech-to-text** | `speech-to-text` (whisper `transcriber` — default, offline), `azure-speech-to-text` (optional cloud STT — tool `azure_stt`, preferred when `AZURE_SPEECH_KEY` is set) |
 | **Avatar / lip-sync** | `avatar-video`, `heygen`, `create-video`, `faceswap`, `video-translate`, `agents` |
 | **Capture** | `playwright-recording` (browser flows), `ffmpeg` (post) |
