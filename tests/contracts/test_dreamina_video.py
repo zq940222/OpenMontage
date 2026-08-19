@@ -582,3 +582,61 @@ class TestSchemaValidation:
             },
             DreaminaVideo().input_schema,
         )
+
+
+# ------------------------------------------------------------------
+# Submit dispatch verification
+#
+# A submit that returns submit_id but no logid/credit_count was accepted by the
+# server and never queued for generation. Nothing is charged, and the task sits
+# in `querying` forever — so the tool must re-submit rather than poll it.
+# ------------------------------------------------------------------
+
+class TestSubmitDispatch:
+
+    @staticmethod
+    def _tool_with_outputs(outputs):
+        """DreaminaVideo whose run_command replays `outputs` in order."""
+        calls = {"n": 0}
+        tool = DreaminaVideo()
+
+        class _Proc:
+            def __init__(self, stdout):
+                self.stdout = stdout
+                self.stderr = ""
+                self.returncode = 0
+
+        def fake_run(cmd, timeout=None):
+            i = calls["n"]
+            calls["n"] += 1
+            return _Proc(outputs[min(i, len(outputs) - 1)])
+
+        tool.run_command = fake_run  # type: ignore[assignment]
+        return tool, calls
+
+    def test_dispatched_submit_returns_immediately(self):
+        ok = '{"submit_id": "aaaaaaaa-1111-2222-3333-444444444444", "logid": "L1", "credit_count": 30}'
+        tool, calls = self._tool_with_outputs([ok])
+        assert tool._submit(["dreamina", "x"]).startswith("aaaaaaaa")
+        assert calls["n"] == 1, "a dispatched submit must not be repeated (it is charged)"
+
+    def test_undispatched_submit_is_retried_then_succeeds(self):
+        undispatched = '{"submit_id": "bbbbbbbb-1111-2222-3333-444444444444"}'
+        ok = '{"submit_id": "cccccccc-1111-2222-3333-444444444444", "logid": "L2", "credit_count": 30}'
+        tool, calls = self._tool_with_outputs([undispatched, ok])
+        assert tool._submit(["dreamina", "x"]).startswith("cccccccc")
+        assert calls["n"] == 2
+
+    def test_persistently_undispatched_submit_raises(self):
+        undispatched = '{"submit_id": "dddddddd-1111-2222-3333-444444444444"}'
+        tool, _ = self._tool_with_outputs([undispatched])
+        with pytest.raises(RuntimeError, match="never dispatched"):
+            tool._submit(["dreamina", "x"])
+
+    def test_credit_count_alone_counts_as_dispatched(self):
+        # Defensive: a response carrying the charge but no logid is still a
+        # real dispatch, and re-submitting it would double-charge the user.
+        paid = '{"submit_id": "eeeeeeee-1111-2222-3333-444444444444", "credit_count": 30}'
+        tool, calls = self._tool_with_outputs([paid])
+        assert tool._submit(["dreamina", "x"]).startswith("eeeeeeee")
+        assert calls["n"] == 1

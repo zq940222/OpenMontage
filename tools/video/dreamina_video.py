@@ -76,6 +76,13 @@ _SUBMIT_ID_RE = re.compile(
 # first" state. Retrying burns nothing but never succeeds — surface to user.
 _COMPLIANCE_MARKER = "AigcComplianceConfirmationRequired"
 
+# Terminal too: no amount of retrying conjures credits.
+_INSUFFICIENT_CREDIT_MARKER = "InsufficientCredit"
+
+# How many times to re-submit when the submit never reached the dispatch API.
+# Only ever applied to submits that were NOT charged (see _submit).
+_SUBMIT_ATTEMPTS = 3
+
 _FAILED_STATUSES = {"failed", "fail", "error", "cancelled", "canceled", "expired"}
 
 
@@ -714,26 +721,66 @@ class DreaminaVideo(BaseTool):
         return int(payload.get("total_credit", 0)), None
 
     def _submit(self, cmd: list[str]) -> str:
-        # Submit also uploads any local reference files first — allow time.
-        try:
-            proc = self.run_command(cmd, timeout=900)
-        except ToolCommandError as exc:
-            detail = exc.detail or str(exc)
-            if _COMPLIANCE_MARKER in detail:
-                raise RuntimeError(self._compliance_message(detail)) from exc
-            raise RuntimeError(f"submit failed: {detail[:800]}") from exc
+        """Submit until the task is actually DISPATCHED, not merely accepted.
 
-        stdout = proc.stdout or ""
-        payload = self._parse_json(stdout)
-        submit_id = (payload or {}).get("submit_id")
-        if not submit_id:
-            match = _SUBMIT_ID_RE.search(stdout)
-            submit_id = match.group(0) if match else None
-        if not submit_id:
-            raise RuntimeError(
-                f"submit returned no submit_id. CLI output: {stdout.strip()[:800]}"
+        A submit uploads the local reference files and then calls the dispatch
+        API. On a flaky link those are two separate places to lose the
+        connection, and they fail differently:
+
+          * dropped before any response  -> CLI exits non-zero printing nothing
+          * dropped after the task row was created but before dispatch
+                                         -> stdout carries `submit_id` but NO
+                                            `logid` and no `credit_count`
+          * clean submit                 -> `submit_id` + `logid` + `credit_count`
+
+        The middle case is the dangerous one: it looks like a successful submit,
+        so the caller polls a task that will sit in `querying` forever and never
+        generate. Observed in the wild as a 68-minute wait for a 5s clip.
+
+        Both failure modes are FREE — nothing is charged unless `credit_count`
+        comes back — so retrying is safe and costs only wall clock. Retrying a
+        DISPATCHED submit would double-charge, so we never retry once a `logid`
+        is present.
+        """
+        last_detail = ""
+        for attempt in range(1, _SUBMIT_ATTEMPTS + 1):
+            try:
+                proc = self.run_command(cmd, timeout=900)
+            except ToolCommandError as exc:
+                detail = exc.detail or str(exc)
+                # Terminal: retrying re-fails identically and wastes the user's
+                # wall clock (compliance needs a one-time web-UI confirmation;
+                # a credit shortfall needs a top-up).
+                if _COMPLIANCE_MARKER in detail:
+                    raise RuntimeError(self._compliance_message(detail)) from exc
+                if _INSUFFICIENT_CREDIT_MARKER in detail:
+                    raise RuntimeError(f"submit failed: {detail[:800]}") from exc
+                last_detail = detail or "CLI exited non-zero with no output"
+                continue
+
+            stdout = proc.stdout or ""
+            payload = self._parse_json(stdout) or {}
+            submit_id = payload.get("submit_id")
+            if not submit_id:
+                match = _SUBMIT_ID_RE.search(stdout)
+                submit_id = match.group(0) if match else None
+            if not submit_id:
+                last_detail = f"no submit_id in CLI output: {stdout.strip()[:400]}"
+                continue
+
+            # The dispatch receipt. Without it the task exists but was never
+            # queued — abandon this submit_id and try again (nothing charged).
+            if payload.get("logid") or payload.get("credit_count"):
+                return str(submit_id)
+
+            last_detail = (
+                f"task {submit_id} was accepted but never dispatched "
+                f"(no logid/credit_count — connection lost mid-submit)"
             )
-        return str(submit_id)
+
+        raise RuntimeError(
+            f"submit failed after {_SUBMIT_ATTEMPTS} attempts: {last_detail[:600]}"
+        )
 
     def _poll(
         self, submit_id: str, *, poll_interval: float, timeout_seconds: int
