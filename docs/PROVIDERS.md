@@ -10,7 +10,7 @@ Everything you need to know about every provider in OpenMontage — setup instru
 
 | Step | Cost | What to set up | What it unlocks |
 |------|------|----------------|-----------------|
-| 0 | **already paid for** | Jimeng (即梦) membership + Gemini subscription | Seedance 2.0 video and Gemini images with **no API key** — see [No-API-Key Providers](#no-api-key-providers-use-your-own-subscriptions) |
+| 0 | **already paid for** | Jimeng (即梦) membership + Gemini subscription + Suno subscription | Seedance 2.0 video, Gemini images, and Suno music with **no API key** — see [No-API-Key Providers](#no-api-key-providers-use-your-own-subscriptions) |
 | 1 | **$0** | Pexels + Pixabay | Stock photos and videos — enough to produce basic videos |
 | 2 | **$0** | Google API key | TTS with 700+ voices (1M chars/month free) + $300 new account credit |
 | 3 | **$0** | ElevenLabs | Premium TTS + music + SFX (10K chars/month free) |
@@ -74,7 +74,7 @@ VIDEO_GEN_LOCAL_MODEL=       # wan2.1-1.3b, wan2.1-14b, hunyuan-1.5, ltx2-local,
 
 ## No-API-Key Providers (use your own subscriptions)
 
-These two spend an account you already pay for instead of an API key. Both report `runtime: browser` in the registry and `estimate_cost() == 0.0` USD — the real budget is your subscription quota or credit balance, so treat cost governance as "credits/quota", not dollars.
+These three spend an account you already pay for instead of an API key. Both report `runtime: browser` in the registry and `estimate_cost() == 0.0` USD — the real budget is your subscription quota or credit balance, so treat cost governance as "credits/quota", not dollars.
 
 ### Jimeng (即梦) — Seedance 2.0 video on membership credits
 
@@ -168,6 +168,57 @@ Gemini serves JPEG regardless of the extension you request. The tool re-encodes 
 No seed, no negative prompt, no ratio control — the requested aspect ratio is written into the prompt as a request, not a constraint. One request at a time per profile (a Chromium profile can't be opened twice), so parallel scene generation serializes here. A web session can require re-login mid-batch, which makes this a poor fit for unattended runs.
 
 Failures dump a screenshot and page HTML to `~/.openmontage/browser/_debug/gemini/`. When the web UI changes, selectors are data — override them in `~/.openmontage/browser/selectors.json` without touching code. See `.agents/skills/gemini-web-image/SKILL.md`.
+
+---
+
+### Suno Web — music on your Suno subscription
+
+> **Best if you have a Suno subscription but no music API key.** Drives suno.com/create through a persistent Chromium profile that holds your login. Suno has no self-serve public API, so the web app is the only way to spend a Suno subscription programmatically.
+
+**Tool unlocked:** `suno_web_music`
+**Env vars:** none required (`OPENMONTAGE_BROWSER_*` are optional tuning)
+
+Not to be confused with `suno_music`, a separate tool that calls the third-party reseller `sunoapi.org` and needs `SUNO_API_KEY`. Different provider, different billing.
+
+#### Setup
+
+```bash
+pip install playwright
+python -m playwright install chromium
+python -m tools._browser login suno      # sign in yourself in the window that opens
+python -m tools._browser status          # confirm
+```
+
+Credentials are never read, typed, or stored by OpenMontage. Cookies live in `~/.openmontage/browser/suno`, outside the repo.
+
+#### What it's best for
+
+- Instrumental beds for narrated video, where vocals would fight the voiceover
+- Mood-specific BGM described in plain language (genre + instrumentation + tempo)
+- Any track where you'd rather spend subscription credits than per-track API cost
+
+#### Prompting
+
+Write a style sentence, not a story: genre + mood + instrumentation + tempo. English works better than Chinese, and under ~200 characters stays sharp.
+
+```
+Cinematic tension underscore, dark strings and pulsing sub-bass,
+building dread with a single low piano motif, instrumental, 80 BPM
+```
+
+Keep `instrumental: true` for anything under narration. The tool flips the Instrumental switch *and* writes "instrumental, no vocals" into the prompt, because the switch is the most drift-prone selector. Check `data.instrumental_toggle_applied` — `false` means only the wording asked, so listen before trusting it.
+
+#### Duration and candidates
+
+`supports.exact_duration` is `false` — Suno picks the length. Generate for **mood**, read `data.duration_seconds`, then trim with ffmpeg in the edit stage. Asking for "a 45-second track" will not produce one.
+
+One generation renders two candidates for one credit spend. `download_all: true` saves both as `<name>.1.mp3` / `<name>.2.mp3` — auditioning two files you already paid for is free, regenerating is not.
+
+#### Limits
+
+No seed, no stems, no exact duration. One request at a time per profile (a Chromium profile can't be opened twice). Generation takes 1-3 minutes. `retry_policy.max_retries = 0` on purpose: regeneration spends credits, so the agent decides, never the tool. A reported credit exhaustion is terminal — fall back to `pixabay_music` (free) or `google_music` (paid, bills GCP) rather than retrying.
+
+The `suno` selector table was written from Suno's documented UI, not verified against a live signed-in DOM, so expect to repair one or two selectors on the first real run. Failures dump a screenshot and page HTML to `~/.openmontage/browser/_debug/suno/`; override selectors in `~/.openmontage/browser/selectors.json` without touching code. See `.agents/skills/suno-web-music/SKILL.md`.
 
 ---
 

@@ -44,6 +44,7 @@ __all__ = [
 # Home page each provider's login CLI opens, and which a tool navigates to.
 PROVIDER_URLS: dict[str, str] = {
     "gemini": "https://gemini.google.com/app",
+    "suno": "https://suno.com/create",
 }
 
 _LOGIN_MARKER = "openmontage_login.json"

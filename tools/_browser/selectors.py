@@ -59,6 +59,99 @@ SELECTORS: dict[str, dict[str, list[str]]] = {
             "button[aria-label*='停止']",
         ],
     },
+    # Suno's create page. Two authoring modes: Simple ("Song Description" box +
+    # an Instrumental switch) and Custom (separate Styles / Lyrics / Title
+    # fields). The tool defaults to Simple because it needs the fewest
+    # selectors, and every selector here is a drift risk.
+    #
+    # NOTE: unlike the gemini table, these were written from Suno's documented
+    # UI rather than verified against the live signed-in DOM (that needs the
+    # user's own login). Expect to repair one or two on first real run — the
+    # tool dumps a screenshot + HTML on failure precisely so that repair is a
+    # one-line edit here or in ~/.openmontage/browser/selectors.json.
+    "suno": {
+        # Simple mode's song-description box. Also the signed-in probe the
+        # login CLI waits for, so it must be something that only renders for a
+        # signed-in session.
+        # Deliberately no bare "textarea" catch-all: the login CLI treats a
+        # prompt_input match as proof of a signed-in session, and Suno's
+        # logged-out landing page carries a describe-your-song box as a signup
+        # funnel. A catch-all here would record a login that never happened.
+        "prompt_input": [
+            "textarea[placeholder*='describe' i]",
+            "textarea[placeholder*='description' i]",
+            "textarea[placeholder*='song' i]",
+            "textarea[data-testid*='prompt' i]",
+            "div[contenteditable='true'][role='textbox']",
+        ],
+        # Custom mode: the genre/instrumentation field.
+        "style_input": [
+            "textarea[placeholder*='style' i]",
+            "input[placeholder*='style' i]",
+            "textarea[placeholder*='genre' i]",
+            "textarea[data-testid*='style' i]",
+        ],
+        "title_input": [
+            "input[placeholder*='title' i]",
+            "input[data-testid*='title' i]",
+        ],
+        "lyrics_input": [
+            "textarea[placeholder*='lyric' i]",
+            "textarea[data-testid*='lyric' i]",
+        ],
+        # Switch that suppresses vocals. Critical for narration-backing BGM:
+        # vocals fight the voiceover for the same frequencies.
+        "instrumental_toggle": [
+            "button[role='switch'][aria-label*='instrumental' i]",
+            "[data-testid*='instrumental' i]",
+            "button[role='switch']:near(:text('Instrumental'))",
+            "label:has-text('Instrumental') button[role='switch']",
+            "div:has-text('Instrumental') > button[role='switch']",
+        ],
+        "custom_mode_toggle": [
+            "button:has-text('Custom')",
+            "[role='tab']:has-text('Custom')",
+            "[data-testid*='custom' i]",
+        ],
+        "create_button": [
+            "button[data-testid*='create' i]",
+            "button:has-text('Create')",
+            "button:has-text('创作')",
+            "button[type='submit']",
+        ],
+        # Any of these means the session is not logged in.
+        "logged_out": [
+            "a[href*='/login']",
+            "button:has-text('Sign in')",
+            "a:has-text('Sign in')",
+            "button:has-text('Sign up')",
+            "button:has-text('Log in')",
+            "a:has-text('Log in')",
+            "button:has-text('Continue with Google')",
+        ],
+        # Present while a clip is still rendering.
+        "generating": [
+            "[data-testid*='loading' i]",
+            ":text('Generating')",
+            ":text('Queued')",
+        ],
+        # Credit exhaustion is terminal, so this group must be RUTHLESSLY
+        # specific. Playwright ':text()' is substring matching, and the create
+        # page shows the balance as standing chrome ("2,340 credits remaining").
+        # A candidate that matches a healthy balance would raise the tool's
+        # worst error — "terminal, do not retry" — on a full account. Only
+        # phrasings that cannot appear next to a non-zero balance belong here.
+        "quota_exhausted": [
+            ":text('out of credits')",
+            ":text('Out of Credits')",
+            ":text('not enough credits')",
+            ":text('insufficient credits')",
+        ],
+        # DOM fallback when no audio response was sniffed off the network.
+        "audio_element": [
+            "audio[src]",
+        ],
+    },
 }
 
 
