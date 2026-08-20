@@ -83,6 +83,7 @@ COMFYUI_VIDEO_SERVER_URL=    # Optional video-specific ComfyUI server
 # NO KEY AT ALL — your own subscriptions (one-time login instead of an env var)
 #   dreamina_video     dreamina login                        (Jimeng membership credits)
 #   gemini_web_image   python -m tools._browser login gemini (Gemini subscription quota)
+#   suno_web_music     python -m tools._browser login suno   (Suno subscription credits)
 ```
 
 ---
@@ -111,7 +112,7 @@ stable contract for them at the time of this update.
 
 ## No-API-Key Providers (use your own subscriptions)
 
-These three spend an account you already pay for instead of an API key. Both report `runtime: browser` in the registry and `estimate_cost() == 0.0` USD — the real budget is your subscription quota or credit balance, so treat cost governance as "credits/quota", not dollars.
+These three spend an account you already pay for instead of an API key. All three report `runtime: browser` in the registry and `estimate_cost() == 0.0` USD — the real budget is your subscription quota or credit balance, so treat cost governance as "credits/quota", not dollars.
 
 ### Jimeng (即梦) — Seedance 2.0 video on membership credits
 
