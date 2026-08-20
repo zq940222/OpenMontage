@@ -92,7 +92,22 @@ SELECTORS: dict[str, dict[str, list[str]]] = {
         # prompt_input match as proof of a signed-in session, and Suno's
         # logged-out landing page carries a describe-your-song box as a signup
         # funnel. A catch-all here would record a login that never happened.
+        #
+        # maxlength is what separates the box you can actually type in from the
+        # decoys. A signed-in /create page carries four textareas; measured on
+        # the live DOM they are lyrics (no maxlength), styles (1000), the real
+        # Song Description composer (3000), and a hidden 500-char
+        # "Describe the sound you want" box. first_locator picks the first
+        # selector with count() > 0 and count() does not care about visibility,
+        # so a placeholder match lands on the hidden 500 box and every click
+        # against it times out after 120s. Keep the maxlength entry first.
+        #
+        # Not verified: whether the logged-out signup funnel also uses
+        # maxlength=3000. If it does, this entry inherits the same
+        # false-signed-in risk the placeholder entries below already carry —
+        # it does not add a new one.
         "prompt_input": [
+            "textarea[maxlength='3000']",
             "textarea[placeholder*='describe' i]",
             "textarea[placeholder*='description' i]",
             "textarea[placeholder*='song' i]",
